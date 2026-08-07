@@ -27,14 +27,15 @@ def run_job() -> None:
         print(f"Fetched {len(data)} companies.")
         
         # 2. Convert JSON data to a Pandas DataFrame & export to CSV string
-        # Adjust `data['items']` depending on where the array of records is located in your JSON response
-        # Upload the CSV string directly to GCS bucket in-memory
-        print(f"Uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
+        # 3. Adjust `data['items']` depending on where the array of records is located in your JSON response
         df = pd.DataFrame(data)
         csv_string = df.to_csv(index=False)
+        
+        # Upload the CSV string directly to GCS bucket in-memory
         storage_client = storage.Client()
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(DESTINATION_BLOB_NAME)
+        print(f"Uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
         blob.upload_from_string(csv_string, content_type="text/csv")
         print(f"Finished uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
 
@@ -51,7 +52,7 @@ def run_job() -> None:
             source_format=bigquery.SourceFormat.CSV,
             skip_leading_rows=1,      # Skip header row for CSV
             autodetect=True,          # Automatically infer schema columns/types
-            jagged_rows=True,          # Allow rows with missing values
+            jagged_rows=True,         # Allow rows with missing values
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND # Append data
         )
         
@@ -78,3 +79,4 @@ if __name__ == "__main__":
         sys.exit(1)  # Exit with code 1 to indicate failure to Cloud Run
     finally:
         print("Job completed.")
+        sys.exit(0)  # Exit with code 0 to indicate success to Cloud Run
