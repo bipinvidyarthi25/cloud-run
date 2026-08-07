@@ -18,11 +18,21 @@ The job supports the following optional arguments and environment variables:
 - `--delay` / `JOB_DELAY_SECONDS` — seconds to wait between iterations
 
 Example:
-
 ```bash
 docker run --rm cloudrun-job python main.py --message "Hello Job" --iterations 5 --delay 0.5
 ```
 
-## Deploy to Cloud Run
+## 1. Log into gcloud
+## 2. Configure docker  (make sure to specify appropriate region)
+## 3. Set email address as default account
+```bash
+gcloud auth login
+gcloud auth configure-docker us-east4-docker.pkg.dev
+gcloud config set account bipin.vidyarthi@gmail.com
+```
 
-Use `gcloud run jobs create` to deploy this container image as a Cloud Run job.
+## 4. Deploy to Cloud Run
+```bash
+docker build -t us-east4-docker.pkg.dev/cloud-run-dev-504707/cloud-run-repo/my-job-image:v5 .
+docker push us-east4-docker.pkg.dev/cloud-run-dev-504707/cloud-run-repo/my-job-image:v5
+```

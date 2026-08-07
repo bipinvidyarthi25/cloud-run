@@ -1,20 +1,23 @@
-# Cloud Run Python CRUD Example
+## Cloud Run Python CRUD Example
+## Simple Flask CRUD API suitable for packaging and deploying to Google Cloud Run.
 
-Simple Flask CRUD API suitable for packaging and deploying to Google Cloud Run.
-
-# Set email address as default account
+## Quickstart:
+## 1. Log into gcloud
+## 2. Configure docker  (make sure to specify appropriate region)
+## 3. Set email address as default account
+```bash
+gcloud auth login
+gcloud auth configure-docker us-east4-docker.pkg.dev
 gcloud config set account bipin.vidyarthi@gmail.com
+```
 
-Quickstart:
-
-# Build the image in Google artifact registry path: "us-east4-docker.pkg.dev/cloud-run-dev-504707/cloud-run-repo"
+## 4. Deploy to Cloud Run
+```bash
 docker build -t us-east4-docker.pkg.dev/cloud-run-dev-504707/cloud-run-repo/my-image:v1 .
-
-
-# Push the completed layers to Google Artifact Registry
 docker push us-east4-docker.pkg.dev/cloud-run-dev-504707/cloud-run-repo/my-image:v1
+```
 
-Local run
+# Local run
 
 ```bash
 pip install -r requirements.txt
