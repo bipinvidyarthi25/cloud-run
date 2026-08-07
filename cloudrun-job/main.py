@@ -1,0 +1,80 @@
+import argparse
+import datetime
+import os
+import io
+import sys
+import time
+import json
+import pandas as pd
+import requests
+from google.cloud import storage
+from google.cloud import bigquery
+
+formatted_time = datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+def run_job() -> None:
+    try:
+        API_URL = "https://fake-json-api.mock.beeceptor.com/companies"
+        BUCKET_NAME = "cloud-run-bkv"
+        DESTINATION_BLOB_NAME = f"api_data_{formatted_time}.csv"        
+        GCS_URI = f"gs://{BUCKET_NAME}/{DESTINATION_BLOB_NAME}"
+        
+        # 1. Fetch data from the API
+        print(f"Fetching companies data at {formatted_time}")
+
+        data = requests.get(API_URL).json()
+
+        print(f"Fetched {len(data)} companies.")
+        
+        # 2. Convert JSON data to a Pandas DataFrame & export to CSV string
+        # Adjust `data['items']` depending on where the array of records is located in your JSON response
+        # Upload the CSV string directly to GCS bucket in-memory
+        print(f"Uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
+        df = pd.DataFrame(data)
+        csv_string = df.to_csv(index=False)
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(DESTINATION_BLOB_NAME)
+        blob.upload_from_string(csv_string, content_type="text/csv")
+        print(f"Finished uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
+
+        # 3. Load the CSV data from GCS into BigQuery
+        print(f"Loading CSV data from GCS into BigQuery.")
+        bq_client = bigquery.Client()
+        
+        dataset_id = "ds_bipin_vidyarthi"  # Replace with your dataset ID
+        table_id = "company_master"      # Replace with your table ID
+        table_ref = bq_client.dataset(dataset_id).table(table_id)
+
+        # 4. Configure the load job
+        job_config = bigquery.LoadJobConfig(
+            source_format=bigquery.SourceFormat.CSV,
+            skip_leading_rows=1,      # Skip header row for CSV
+            autodetect=True,          # Automatically infer schema columns/types
+            jagged_rows=True,          # Allow rows with missing values
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND # Append data
+        )
+        
+        # 5. Trigger the asynchronous load job
+        print(f"Starting load job for {GCS_URI} into BigQuery table {dataset_id}.{table_id}.")
+        load_job = bq_client.load_table_from_uri(
+            GCS_URI,
+            table_ref,
+            job_config=job_config
+        )
+    
+        # 6. Wait for the job to complete (blocks until finished)
+        load_job.result()
+        print(f"Finished loading CSV data from GCS into BigQuery.")
+    except Exception as e:
+        raise
+
+
+if __name__ == "__main__":
+    try:
+        run_job()
+    except Exception as e:
+        print(f"Job failed with error: {e}")
+        sys.exit(1)  # Exit with code 1 to indicate failure to Cloud Run
+    finally:
+        print("Job completed.")
