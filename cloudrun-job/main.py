@@ -11,14 +11,51 @@ from google.cloud import storage
 from google.cloud import bigquery
 
 formatted_time = datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+API_URL = "https://fake-json-api.mock.beeceptor.com/companies"
+BUCKET_NAME = "cloud-run-bkv"
+DESTINATION_BLOB_NAME = f"api_data_{formatted_time}.csv"        
+GCS_URI = f"gs://{BUCKET_NAME}/{DESTINATION_BLOB_NAME}"
+
+project_id = "cloud-run-dev-504707"  # Replace with your GCP project ID
+dataset_id = "ds_bipin_vidyarthi"  # Replace with your dataset ID
+table_id = "company_master"      # Replace with your table ID
+table_ref = f"{project_id}.{dataset_id}.{table_id}"
+
+def save_api_data_to_bigquery(data: list) -> None:
+    try:        
+        # Data must be a list of dictionaries (rows), even for a single row
+        rows_to_insert = []
+        for row in data or []:  # Ensure data is iterable
+            rows_to_insert.append({
+                "id": int(row.get("id")) if row.get("id") is not None else None,
+                "name": row.get("name"),
+                "address": row.get("address"),
+                "zip": row.get("zip"),
+                "country": row.get("country"),
+                "employeeCount": int(row.get("employeeCount")) if row.get("employeeCount") is not None else None,
+                "industry": row.get("industry"),
+                "marketCap": float(row.get("marketCap")) if row.get("marketCap") is not None else None,
+                "domain": row.get("domain"),
+                "logo": row.get("logo"),
+                "ceoName": row.get("ceoName"),
+                #"ingestion_date": datetime.datetime.now()
+            })
+
+        # Stream data into BigQuery
+        bq_client = bigquery.Client()
+        errors = bq_client.insert_rows_json(table_ref, rows_to_insert)
+
+        # Check for API-level payload validation errors
+        if errors == []:
+            print("New rows have been successfully added.")
+        else:
+            print(f"Encountered errors while inserting rows: {errors}")
+            raise
+    except Exception as e:
+        raise
 
 def run_job() -> None:
-    try:
-        API_URL = "https://fake-json-api.mock.beeceptor.com/companies"
-        BUCKET_NAME = "cloud-run-bkv"
-        DESTINATION_BLOB_NAME = f"api_data_{formatted_time}.csv"        
-        GCS_URI = f"gs://{BUCKET_NAME}/{DESTINATION_BLOB_NAME}"
-        
+    try:        
         # 1. Fetch data from the API
         print(f"Fetching companies data at {formatted_time}")
 
@@ -39,13 +76,13 @@ def run_job() -> None:
         blob.upload_from_string(csv_string, content_type="text/csv")
         print(f"Finished uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
 
+        # 4. Load the data into BigQuery
+        save_api_data_to_bigquery(data)
+
+        """
         # 3. Load the CSV data from GCS into BigQuery
         print(f"Loading CSV data from GCS into BigQuery.")
         bq_client = bigquery.Client()
-        
-        dataset_id = "ds_bipin_vidyarthi"  # Replace with your dataset ID
-        table_id = "company_master"      # Replace with your table ID
-        table_ref = bq_client.dataset(dataset_id).table(table_id)
 
         # 4. Configure the load job
         job_config = bigquery.LoadJobConfig(
@@ -67,6 +104,7 @@ def run_job() -> None:
         # 6. Wait for the job to complete (blocks until finished)
         load_job.result()
         print(f"Finished loading CSV data from GCS into BigQuery.")
+        """
     except Exception as e:
         raise
 
