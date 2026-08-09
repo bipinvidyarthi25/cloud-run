@@ -1,5 +1,5 @@
 import argparse
-import datetime
+from datetime import datetime, timezone
 import os
 import io
 import sys
@@ -10,10 +10,12 @@ import requests
 from google.cloud import storage
 from google.cloud import bigquery
 
-formatted_time = datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+# Setting up the timestamp for file naming and logging
+current_timestamp = datetime.now(timezone.utc)
+formatted_datetime = current_timestamp.strftime("%Y-%m-%d-%H%M%S")
 API_URL = "https://fake-json-api.mock.beeceptor.com/companies"
 BUCKET_NAME = "cloud-run-bkv"
-DESTINATION_BLOB_NAME = f"api_data_{formatted_time}.csv"        
+DESTINATION_BLOB_NAME = f"api_data_{formatted_datetime}.csv"        
 GCS_URI = f"gs://{BUCKET_NAME}/{DESTINATION_BLOB_NAME}"
 
 project_id = "cloud-run-dev-504707"  # Replace with your GCP project ID
@@ -38,7 +40,7 @@ def save_api_data_to_bigquery(data: list) -> None:
                 "domain": row.get("domain"),
                 "logo": row.get("logo"),
                 "ceoName": row.get("ceoName"),
-                #"ingestion_date": datetime.datetime.now()
+                #"ingestion_date": current_timestamp.isoformat()  # Add ingestion timestamp
             })
 
         # Stream data into BigQuery
@@ -57,7 +59,7 @@ def save_api_data_to_bigquery(data: list) -> None:
 def run_job() -> None:
     try:        
         # 1. Fetch data from the API
-        print(f"Fetching companies data at {formatted_time}")
+        print(f"Fetching companies data at {formatted_datetime}")
 
         data = requests.get(API_URL).json()
 
@@ -68,7 +70,7 @@ def run_job() -> None:
         df = pd.DataFrame(data)
         csv_string = df.to_csv(index=False)
         
-        # Upload the CSV string directly to GCS bucket in-memory
+        # 4. Upload the CSV string directly to GCS bucket in-memory
         storage_client = storage.Client()
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(DESTINATION_BLOB_NAME)
@@ -76,7 +78,7 @@ def run_job() -> None:
         blob.upload_from_string(csv_string, content_type="text/csv")
         print(f"Finished uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
 
-        # 4. Load the data into BigQuery
+        # 5. Load the data into BigQuery
         save_api_data_to_bigquery(data)
 
         """
