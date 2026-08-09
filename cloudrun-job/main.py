@@ -10,15 +10,15 @@ import requests
 from google.cloud import storage
 from google.cloud import bigquery
 
+# Setting up the timestamp for file naming and logging
+current_timestamp = datetime.now(timezone.utc)
+formatted_datetime = current_timestamp.strftime("%Y-%m-%d-%H%M%S")
+
 BUCKET_NAME = "cloud-run-bkv"
 PROJECT_ID = "cloud-run-dev-504707"  # Replace with your GCP project ID
 DATASET_ID = "ds_bipin_vidyarthi"  # Replace with your dataset ID
 DESTINATION_BLOB_NAME = f"api_data_{formatted_datetime}.csv"
 DESTINATION_BLOB_GCS_URI = f"gs://{BUCKET_NAME}/{DESTINATION_BLOB_NAME}"
-
-# Setting up the timestamp for file naming and logging
-current_timestamp = datetime.now(timezone.utc)
-formatted_datetime = current_timestamp.strftime("%Y-%m-%d-%H%M%S")
 
 
 def fetch_api_data(url: str, token: str) -> list:
