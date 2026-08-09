@@ -10,58 +10,84 @@ import requests
 from google.cloud import storage
 from google.cloud import bigquery
 
+BUCKET_NAME = "cloud-run-bkv"
+PROJECT_ID = "cloud-run-dev-504707"  # Replace with your GCP project ID
+DATASET_ID = "ds_bipin_vidyarthi"  # Replace with your dataset ID
+DESTINATION_BLOB_NAME = f"api_data_{formatted_datetime}.csv"
+DESTINATION_BLOB_GCS_URI = f"gs://{BUCKET_NAME}/{DESTINATION_BLOB_NAME}"
+
 # Setting up the timestamp for file naming and logging
 current_timestamp = datetime.now(timezone.utc)
 formatted_datetime = current_timestamp.strftime("%Y-%m-%d-%H%M%S")
-API_URL = "https://fake-json-api.mock.beeceptor.com/companies"
-BUCKET_NAME = "cloud-run-bkv"
-DESTINATION_BLOB_NAME = f"api_data_{formatted_datetime}.csv"        
-GCS_URI = f"gs://{BUCKET_NAME}/{DESTINATION_BLOB_NAME}"
 
-project_id = "cloud-run-dev-504707"  # Replace with your GCP project ID
-dataset_id = "ds_bipin_vidyarthi"  # Replace with your dataset ID
-table_id = "company_master"      # Replace with your table ID
-table_ref = f"{project_id}.{dataset_id}.{table_id}"
 
-def save_api_data_to_bigquery(data: list) -> None:
-    try:        
+def fetch_api_data(url: str, token: str) -> list:
+    try:
+        if token is None:
+            # If no token is provided, make a simple GET request without authorization
+             response = requests.get(url, timeout=10)  # Set a timeout for the request
+        else:
+            # If a token is provided, include it in the headers for authorization
+            response = requests.get(url, timeout=10, headers={"Authorization": f"Bearer {token}"})
+        # Raise an error for bad responses
+        response.raise_for_status()
+        data = response.json()
+        return data
+    except requests.RequestException as e:
+        print(f"Error fetching data from API: {e}")
+        raise
+
+def get_continents_data() -> None:
+    try:
+        # Fetch data from the continents API
+        print(f"Fetching continents data at {formatted_datetime}")
+        API_URL = "https://dummy-json.mock.beeceptor.com/continents"
+        data = fetch_api_data(API_URL, None)
+        print(f"Fetched {len(data)} continents.")
+        save_continents_data_to_bigquery(data)
+    except Exception as e:
+        print(f"Error fetching continents data: {e}")
+        raise
+
+def save_continents_data_to_bigquery(data: list) -> None:
+    try:
         # Data must be a list of dictionaries (rows), even for a single row
         rows_to_insert = []
         for row in data or []:  # Ensure data is iterable
             rows_to_insert.append({
-                "id": int(row.get("id")) if row.get("id") is not None else None,
+                "code": row.get("code"),
                 "name": row.get("name"),
-                "address": row.get("address"),
-                "zip": row.get("zip"),
-                "country": row.get("country"),
-                "employeeCount": int(row.get("employeeCount")) if row.get("employeeCount") is not None else None,
-                "industry": row.get("industry"),
-                "marketCap": float(row.get("marketCap")) if row.get("marketCap") is not None else None,
-                "domain": row.get("domain"),
-                "logo": row.get("logo"),
-                "ceoName": row.get("ceoName"),
-                #"ingestion_date": current_timestamp.isoformat()  # Add ingestion timestamp
+                "area_sq_km": int(row.get("areaSqKm")) if row.get("areaSqKm") is not None else None,
+                "population": int(row.get("population")) if row.get("population") is not None else None,
+                "lines": list(row.get("lines")) if row.get("lines") is not None else None,
+                "countries_count": int(row.get("countries")) if row.get("countries") is not None else None,
+                "oceans": list(row.get("oceans")) if row.get("oceans") is not None else None,
+                "developed_countries": list(row.get("developedCountries")) if row.get("developedCountries") is not None else None,
+                "created_datetime": current_timestamp.isoformat()  # Add ingestion timestamp
             })
 
         # Stream data into BigQuery
+        table_ref = f"{PROJECT_ID}.{DATASET_ID}.continents"
         bq_client = bigquery.Client()
         errors = bq_client.insert_rows_json(table_ref, rows_to_insert)
 
         # Check for API-level payload validation errors
         if errors == []:
-            print("New rows have been successfully added.")
+            print("New rows have been successfully added to continents table.")
         else:
-            print(f"Encountered errors while inserting rows: {errors}")
+            print(f"Encountered errors while inserting rows to {table_ref}: {errors}")
             raise
     except Exception as e:
+        print(f"Error saving data to BigQuery: {e}")
         raise
 
-def run_job() -> None:
-    try:        
+def get_company_data() -> None:
+    try:
         # 1. Fetch data from the API
+        API_URL = "https://fake-json-api.mock.beeceptor.com/companies"
         print(f"Fetching companies data at {formatted_datetime}")
 
-        data = requests.get(API_URL).json()
+        data = fetch_api_data(API_URL, None)
 
         print(f"Fetched {len(data)} companies.")
         
@@ -79,7 +105,7 @@ def run_job() -> None:
         print(f"Finished uploading CSV to GCS bucket '{BUCKET_NAME}' as '{DESTINATION_BLOB_NAME}'.")
 
         # 5. Load the data into BigQuery
-        save_api_data_to_bigquery(data)
+        save_company_data_to_bigquery(data)
 
         """
         # 3. Load the CSV data from GCS into BigQuery
@@ -96,9 +122,9 @@ def run_job() -> None:
         )
         
         # 5. Trigger the asynchronous load job
-        print(f"Starting load job for {GCS_URI} into BigQuery table {dataset_id}.{table_id}.")
+        print(f"Starting load job for {DESTINATION_BLOB_GCS_URI} into BigQuery table {DATASET_ID}.{TABLE_ID}.")
         load_job = bq_client.load_table_from_uri(
-            GCS_URI,
+            DESTINATION_BLOB_GCS_URI,
             table_ref,
             job_config=job_config
         )
@@ -110,10 +136,44 @@ def run_job() -> None:
     except Exception as e:
         raise
 
+def save_company_data_to_bigquery(data: list) -> None:
+    try:        
+        # Data must be a list of dictionaries (rows), even for a single row
+        rows_to_insert = []
+        for row in data or []:  # Ensure data is iterable
+            rows_to_insert.append({
+                "id": int(row.get("id")) if row.get("id") is not None else None,
+                "name": row.get("name"),
+                "address": row.get("address"),
+                "zip": row.get("zip"),
+                "country": row.get("country"),
+                "employeeCount": int(row.get("employeeCount")) if row.get("employeeCount") is not None else None,
+                "industry": row.get("industry"),
+                "marketCap": float(row.get("marketCap")) if row.get("marketCap") is not None else None,
+                "domain": row.get("domain"),
+                "logo": row.get("logo"),
+                "ceoName": row.get("ceoName"),
+                "ingestion_date": current_timestamp.isoformat()  # Add ingestion timestamp
+            })
+
+        # Stream data into BigQuery
+        bq_client = bigquery.Client()
+        table_ref = f"{PROJECT_ID}.{DATASET_ID}.company_master"
+        errors = bq_client.insert_rows_json(table_ref, rows_to_insert)
+
+        # Check for API-level payload validation errors
+        if errors == []:
+            print("New rows have been successfully added to company_master table.")
+        else:
+            print(f"Encountered errors while inserting rows to {table_ref}: {errors}")
+            raise
+    except Exception as e:
+        raise
 
 if __name__ == "__main__":
     try:
-        run_job()
+        get_continents_data()
+        get_company_data()
     except Exception as e:
         print(f"Job failed with error: {e}")
         sys.exit(1)  # Exit with code 1 to indicate failure to Cloud Run
